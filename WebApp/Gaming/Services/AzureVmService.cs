@@ -1,3 +1,4 @@
+using System.Configuration;
 using Azure;
 using Azure.Identity;
 using Azure.ResourceManager;
@@ -6,7 +7,6 @@ using Azure.ResourceManager.Compute.Models;
 using Azure.ResourceManager.Network;
 using Azure.ResourceManager.Network.Models;
 using Azure.ResourceManager.Resources;
-using Azure.ResourceManager.Resources.Models;
 using Gaming.Models;
 
 namespace Gaming.Services;
@@ -149,12 +149,18 @@ public class AzureVmService
         _vmName += customVm.Login;
         _ipName += customVm.Login;
         _nicName += customVm.Login;
+        
+        var conf = new ConfigurationBuilder().AddJsonFile("appsettings.json").Build();
         // First we construct our armClient
-        var armClient = new ArmClient(new DefaultAzureCredential());
+        var client = new ArmClient(new ClientSecretCredential(
+            conf.GetValue("TenantId", "tenantId"),
+            conf.GetValue("ClientId", "clientId"),
+            conf.GetValue("ClientSecret", "clientSecret")
+            ));
 
         // Next we get a resource group object
         // ResourceGroup is a {ResourceName}Resource object from above
-        var subscription = await armClient.GetDefaultSubscriptionAsync();
+        var subscription = await client.GetDefaultSubscriptionAsync();
         
         await InitResourceGroup(subscription);
 
@@ -205,7 +211,7 @@ public class AzureVmService
                                 Id = InitNetwork(resourceGroup).Id
                             }
                         }
-                    },
+                    }
                 }
             );
         
@@ -217,11 +223,16 @@ public class AzureVmService
     /// <summary>
     /// Retrieve resource group
     /// </summary>
-    private void RetrieveResourceGroup(String name)
+    private void RetrieveResourceGroup(string name)
     {
-        var armClient = new ArmClient(new DefaultAzureCredential());
-
-        var subscription = armClient.GetDefaultSubscriptionAsync().Result;
+        var conf = new ConfigurationBuilder().AddJsonFile("appsettings.json").Build();
+        var client = new ArmClient(new ClientSecretCredential(
+            conf.GetValue("TenantId", "tenantId"),
+            conf.GetValue("ClientId", "clientId"),
+            conf.GetValue("ClientSecret", "clientSecret")
+        ));
+        
+        var subscription = client.GetDefaultSubscriptionAsync().Result;
         
         var resourceGroups = subscription.GetResourceGroups();
         _resourceGroup = resourceGroups.GetAsync(name).Result;
