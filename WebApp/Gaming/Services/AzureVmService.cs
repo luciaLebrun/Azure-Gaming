@@ -6,6 +6,7 @@ using Azure.ResourceManager.Compute.Models;
 using Azure.ResourceManager.Network;
 using Azure.ResourceManager.Network.Models;
 using Azure.ResourceManager.Resources;
+using Azure.ResourceManager.Resources.Models;
 using Gaming.Models;
 
 namespace Gaming.Services;
@@ -22,6 +23,7 @@ public class AzureVmService
     private string _nicName = "nic-";
     private const string VnetName = "vnet-gaming-001";
     private ResourceGroupResource _resourceGroup;
+    
 
     /// <summary>
     /// Init a resource group
@@ -137,7 +139,7 @@ public class AzureVmService
 
         return nicResource;
     }
-    
+
     /// <summary>
     /// Create a new Azure VM
     /// </summary>
@@ -182,7 +184,10 @@ public class AzureVmService
                     },
                     StorageProfile = new VirtualMachineStorageProfile()
                     {
-                        OSDisk = new VirtualMachineOSDisk(DiskCreateOptionType.FromImage),
+                        OSDisk = new VirtualMachineOSDisk(DiskCreateOptionType.FromImage)
+                        {
+                            DeleteOption = DiskDeleteOptionType.Delete
+                        },
                         ImageReference = new ImageReference()
                         {
                             Offer = "UbuntuServer",
@@ -212,14 +217,14 @@ public class AzureVmService
     /// <summary>
     /// Retrieve resource group
     /// </summary>
-    private void RetrieveResourceGroup()
+    private void RetrieveResourceGroup(String name)
     {
         var armClient = new ArmClient(new DefaultAzureCredential());
 
         var subscription = armClient.GetDefaultSubscriptionAsync().Result;
         
         var resourceGroups = subscription.GetResourceGroups();
-        _resourceGroup = resourceGroups.GetAsync(ResourceGroupName).Result;
+        _resourceGroup = resourceGroups.GetAsync(name).Result;
     }
     
     /// <summary>
@@ -228,7 +233,7 @@ public class AzureVmService
     /// <param name="name"></param>
     public void StartAzureVm(string name)
     {
-        RetrieveResourceGroup();
+        RetrieveResourceGroup(ResourceGroupName);
         var virtualMachines = _resourceGroup.GetVirtualMachines();
         var virtualMachine = virtualMachines.GetAsync(name).Result.Value;
         virtualMachine.PowerOn(WaitUntil.Completed);
@@ -240,7 +245,7 @@ public class AzureVmService
     /// <param name="name"></param>
     public void StopAzureVm(string name)
     {
-        RetrieveResourceGroup();
+        RetrieveResourceGroup(ResourceGroupName);
         var virtualMachines = _resourceGroup.GetVirtualMachines();
         var virtualMachine = virtualMachines.GetAsync(name).Result.Value;
         virtualMachine.PowerOff(WaitUntil.Completed);
@@ -253,19 +258,16 @@ public class AzureVmService
     public async Task DeleteAzureVm(string login)
     {
         // Retrieve
-        RetrieveResourceGroup();
-        
+        RetrieveResourceGroup(ResourceGroupName);
+
         // Get
         VirtualMachineResource vm = await _resourceGroup.GetVirtualMachines().GetAsync(_vmName + login);
         NetworkInterfaceResource nic = await _resourceGroup.GetNetworkInterfaces().GetAsync(_nicName + login);
         PublicIPAddressResource publicIp = await _resourceGroup.GetPublicIPAddresses().GetAsync(_ipName + login);
         VirtualNetworkResource vn = await _resourceGroup.GetVirtualNetworks().GetAsync(VnetName);
-        var diskName = (await vm.InstanceViewAsync(CancellationToken.None)).Value.Disks.ToString();
-        //DiskAccessResource diskAccess = await _resourceGroup.GetDiskAccesses().GetAsync(diskName);
 
         // Delete
         await vm.DeleteAsync(WaitUntil.Completed);
-        //await diskAccess.DeleteAsync(WaitUntil.Completed);
         await nic.DeleteAsync(WaitUntil.Completed);
         await vn.DeleteAsync(WaitUntil.Completed);
         await publicIp.DeleteAsync(WaitUntil.Completed);
